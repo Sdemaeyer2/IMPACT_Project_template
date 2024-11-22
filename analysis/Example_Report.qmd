@@ -1,0 +1,253 @@
+---
+title: "IMP>ACT Example CFA analyses"
+author: "Sven De Maeyer"
+format: 
+  html:
+    toc: true
+    self-contained: true
+    toc-location: left
+    theme:
+      - cosmo 
+      - impact.scss
+---
+
+# Preparation
+
+## Loading the necessary packages
+
+Different packages are necessary to conduct the analyses:
+
+-   `foreign` to import data from other software packages;
+-   `here` helps us to write links to local files in a reproducible way;
+-   `tidyverse` for different data-wrangling steps etc;
+-   `lavaan` for Structural Equation Modeling (so, also for CFA);
+- `semPlot` for creating graphical representations of the models;
+- `semTools` for add-on functionalities related to SEM analyses.
+
+::: callout-note
+## Note
+
+If you want to use packages, make sure that you have installed them beforehand. Installing packages on you computer can be done with the command `install_packages(lavaan, dependencies = T)` for example if you want to install `lavaan`. Or you can do it in the menu under the tab Packages in the RStudio Graphic user interface. Installing packages is something you have to do once, so not every time you want to run your code. Loading the packages, on the other hand, has to be repeated if you want to do certain analyses that necessitate functions from that package. Therefore, you can find the commands `library( )` in the next code block.
+:::
+
+```{r}
+library(foreign)
+library(here)
+library(tidyverse)
+library(lavaan)
+library(semPlot)
+library(semTools)
+```
+
+## Importing the data
+
+Most of the time data comes in different formats, depending on the statistical software used or the (online) survey software used. Three of the most common formats are *SPSS files (.sav)*, *Excel files (.xlsx)*, or *text files (e.g., .txt or .csv)*. This section shows how to import the data in these formats.
+
+The dataset provided for this example is an SPSS dataset. It is stored in the folder **Data** within the project folder. The following code imports the dataset into R.
+
+```{r}
+Data_IMPACT <- read.spss(
+  file = here("Data", "AC.sav"),
+  to.data.frame = T,
+  use.value.labels = F
+)
+```
+
+The `read.spss( )` function is part of the `foreign` package. Within this function we call different arguments:
+
+-   `file =` is to define the location of the file. We use the function `here( )` to make life easy as it allows you just to write down the names of the folders where the file is stored and the filename. No need to write down the full path towards the file (which is great for reproducibility).
+-   `to.data.frame = T` implies that data will be stored in R as a data.frame object;
+-   `use.value.labels = F` can be used to assure that the raw codes from categorical variables in SPSS are stored, rather than the labels (e.g., store the codes `1` and `2` rather than `Boy`and `Girl` if these are the labels given in an SPSS file).
+
+## Data-wrangling
+
+Often, we have to do some manipulations with the data before it is ready for analyses.
+
+For instance, the example dataset contains some background-variables (i.e., i2-i5). To make the data more accessible we could rename and recode these variables.
+
+My preference is to use the fabulous `dplyr` package, which is part of the `tidyverse` universe!
+
+Let us first rename the background variables to more informative names. In the following codeblock we make use of the `rename()` function. The `head(Data_IMPACT, n = 5)` prints the first 5 rows of the dataset so we can check if the renaming is succesfull.
+
+```{r}
+Data_IMPACT <- Data_IMPACT %>%
+  rename(
+    SchoolID = i2,
+    Grade = i3,
+    Sex = i5)
+
+head(Data_IMPACT, n = 5)
+```
+
+# CFA
+
+The Confirmatory Factor Analyses can be performed making use of the `lavaan` package. In this section we describe a workflow to estimate the models.
+
+## Define the base model
+
+The full model for this dataset looks like this:
+
+![Full Model Definition](images/Model_Full.png){#fig-Full-model width="100%"}
+
+A first step in `lavaan` is defining the model making use of the syntax of `lavaan`. This syntax looks like the following:
+
+- `~` is used to define a regression formula in the form of `y ~ x1 + x2` where `y` is a dependent variable and the `x1` and `x2` are explanatory variables;
+- `=~` can be used to define a measurement model for a latent variable;
+- `~~` is used to define a covariance between variables.
+
+Before we estimate the full model as depicted in @fig-Full-model, we will start with a model without the second order latent variable `AC`. 
+
+The following code defines a first basic model with three latent variables: 
+
+- `KAP` (Knowledge of Action Posibilities) measured by `i56`, `i57`, `i58`, and `i59`;
+- 'COI` (Confidence in once own influence) measured by `i60`, `i61`, `i62`, and `i63`;
+- `WTA` (Wish To Act) measured by `i64`, `i65`, `i66`, and `i67`.
+
+We will call the object that stores the model definition `Model_Base`. 
+
+```{r}
+Model_Base <- '
+  KAP =~ i56 + i57 + i58 + i59
+  COI =~ i60 + i61 + i62 + i63
+  WTA =~ i64 + i65 + i66 + i67
+  '
+```
+
+
+## Fit the base model
+
+Now that we have defined the model, we can estimate the fit of the model to a certain dataset making use of the function `cfa( )`. The results of this estimation is stored in a new object called `Fit_Base_Model`. 
+
+```{r}
+Fit_Base_Model <- cfa(
+  model = Model_Base,
+  data = Data_IMPACT
+  )
+```
+
+
+```{r}
+summary(Fit_Base_Model,
+        fit.measures = T,
+        standardized = T)
+```
+
+We can also visualise the estimated model making use of the `semPaths( )` function from the `semPlot` package.
+
+```{r}
+semPaths(
+  Fit_Base_Model,
+  intercepts = F)
+```
+
+This function can be extended by using extra arguments. For instance, we can also use the `whatLabels = "std"` argument to add the standardized parameter estimates to the plot.
+
+```{r}
+semPaths(
+  Fit_Base_Model,
+  intercepts = F,
+  whatLabels = "std")
+```
+
+Later on we will also demonstrate mutligroup analyses to evaluate the measurement invariance of instruments. The `semPlot` package allows you to visualise the results of these type of analyses as well. 
+
+## Modification indices
+
+A typical step in CFA is scanning the modification indices when a model doesn't fit the data well enough. To ask for modification indices in `lavaan` we can rely on the `modindices( )` function. 
+
+In the following code we ask to print the modification indices for our model, sort these modification indices according to there values (highest modification indices first) and to only print the first 10 of them (to avoid a long list of modidfication indices).
+
+```{r}
+modindices(Fit_Base_Model,
+           sort = T,
+           maximum.number = 10)
+```
+
+## Adapt the base model
+
+Imagine we want to estimate an alternative model incorporating the `WTA =~ i63` parameter in the model (regardless of it's theoretical value). Now, the process start allover again. First we define our model, then we estimate the model, and finally we inspect the model fit. 
+
+::: callout-note
+## Note
+
+Notice how we incorporate all the code in one codeblock this time. That makes it more condense. To increase the readability of the code I added some inline remarks in the codeblock (the lines starting with `#`). 
+
+Also, it is always wise to give new models a new name and store the fit in a new object.
+:::
+
+```{r}
+# Define the adapted model
+
+Model_Adapted <- '
+  KAP =~ i56 + i57 + i58 + i59
+  COI =~ i60 + i61 + i62 + i63
+  WTA =~ i64 + i65 + i66 + i67 + i63
+  '
+
+# Estimate the model
+
+Fit_Base_Adapted <- cfa(
+  Model_Adapted,
+  data = Data_IMPACT
+)
+
+# Evaluate model fit of the adapted model and inspect model output
+
+summary(Fit_Base_Adapted,
+        fit.measures = T,
+        standardized = T)
+```
+
+## Compare models
+
+When we have two (or more) competing models, we can compare them on their fit. To perform this model comparison we rely on the `anova()` function.
+
+```{r}
+anova(Fit_Base_Model,
+      Fit_Base_Adapted)
+```
+
+In this example we can see that there is a significant difference in model fit between the two models. 
+
+# Measurement Invariance
+
+
+```{r}
+
+Data_Grade2_Grade3 <- Data_IMPACT %>%
+  filter(
+    Grade == 2 | Grade == 3
+  )
+
+# configural invariance
+fit1 <- cfa(Model_Adapted, 
+            data = Data_Grade2_Grade3, 
+            group = "Grade")
+
+# weak invariance
+fit2 <- cfa(Model_Adapted, 
+            data = Data_Grade2_Grade3, 
+            group = "Grade",
+            group.equal = "loadings")
+
+# strong invariance
+fit3 <- cfa(Model_Adapted, 
+            data = Data_Grade2_Grade3, 
+            group = "Grade",
+            group.equal = c("intercepts", "loadings"))
+
+# model comparison tests
+lavTestLRT(fit1, fit2, fit3)
+```
+
+Another way to perform measurement invariance analyses is to rely on the function `measurementInvariance( )` from the `semTools` package. This will estimate different models in the background and compare these models. So, the output is an overview of fit indices for different models with increased equality constraints.
+
+```{r}
+
+measurementInvariance(
+  model = Model_Adapted,
+  data = Data_Grade2_Grade3,
+  group = "Grade"
+)
+```
+
